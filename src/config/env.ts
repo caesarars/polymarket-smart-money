@@ -1,6 +1,17 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/**
+ * Helper for optional strings sourced from `.env`. Treats empty strings the
+ * same as "unset" — `dotenv` parses `KEY=` as `""`, which would otherwise
+ * trip `.min(1)` validators and crash the app at startup.
+ */
+const optionalString = (max = 1024) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(1).max(max).optional(),
+  );
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -24,8 +35,8 @@ const envSchema = z.object({
     .url()
     .default("wss://ws-subscriptions-clob.polymarket.com/ws/market"),
 
-  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
-  TELEGRAM_CHAT_ID: z.string().min(1).optional(),
+  TELEGRAM_BOT_TOKEN: optionalString(256),
+  TELEGRAM_CHAT_ID: optionalString(128),
 
   SMART_WALLET_SCORE_THRESHOLD: z.coerce.number().min(0).max(100).default(75),
 
@@ -41,7 +52,7 @@ const envSchema = z.object({
    * Optional category to lock the pipeline to (e.g. "Crypto"). Leave empty to
    * crawl the top markets across all categories.
    */
-  PIPELINE_CATEGORY: z.string().min(1).max(64).optional(),
+  PIPELINE_CATEGORY: optionalString(64),
 });
 
 const parsed = envSchema.safeParse(process.env);
