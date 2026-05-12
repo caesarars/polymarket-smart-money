@@ -1,0 +1,45 @@
+{
+  "name": "polymarket-smart-money",
+  "version": "0.1.0",
+  "description": "Polymarket Smart Money Intelligence backend — collects markets/trades/wallets, scores smart wallets, and emits Telegram alerts.",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "sync:markets": "tsx src/scripts/syncMarkets.ts",
+    "score:wallets": "tsx src/scripts/scoreWallets.ts",
+    "pipeline:run": "tsx src/scripts/runPipeline.ts",
+    "worker:markets": "tsx src/modules/markets/market.worker.ts",
+    "worker:wallets": "tsx src/modules/wallets/wallet.worker.ts",
+    "worker:pipeline": "tsx src/modules/pipeline/pipeline.worker.ts",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.7.7",
+    "bullmq": "^5.21.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "ioredis": "^5.4.1",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "pino-pretty": "^11.3.0",
+    "prisma": "^5.22.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

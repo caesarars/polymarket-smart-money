@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.idea
+.vscode
+coverage
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+prisma/migrations/dev.db*

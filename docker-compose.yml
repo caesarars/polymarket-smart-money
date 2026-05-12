@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: polymarket-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-polymarket}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-polymarket}
+      POSTGRES_DB: ${POSTGRES_DB:-polymarket}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - polymarket_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-polymarket} -d ${POSTGRES_DB:-polymarket}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: polymarket-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - polymarket_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: polymarket-smart-money:latest
+    container_name: polymarket-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override DB/Redis URLs to use the docker network hostnames, regardless of
+      # what is in .env (which is configured for local dev against 127.0.0.1).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-polymarket}:${POSTGRES_PASSWORD:-polymarket}@postgres:5432/${POSTGRES_DB:-polymarket}?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      # Bind to localhost only — HTTP API is reachable via SSH tunnel, not the internet.
+      - "127.0.0.1:${PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  polymarket_postgres_data:
+  polymarket_redis_data:
