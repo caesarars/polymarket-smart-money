@@ -8,6 +8,7 @@ COPY prisma ./prisma
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
+COPY public ./public
 RUN npx prisma generate
 RUN npm run build
 RUN npm prune --omit=dev
@@ -20,6 +21,7 @@ RUN apk add --no-cache tini openssl ca-certificates \
 ENV NODE_ENV=production
 COPY --from=builder --chown=app:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=app:nodejs /app/dist ./dist
+COPY --from=builder --chown=app:nodejs /app/public ./public
 COPY --from=builder --chown=app:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=app:nodejs /app/package.json ./package.json
 USER app

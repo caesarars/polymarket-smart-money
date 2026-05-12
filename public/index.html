@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Polymarket Smart Money</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">◇</span>
+        <h1>Polymarket Smart Money</h1>
+      </div>
+      <div class="topbar-right">
+        <span id="status-dot" class="status-dot status-unknown" title="health"></span>
+        <span id="status-text" class="muted">checking…</span>
+        <button id="refresh-btn" class="btn">Refresh</button>
+        <button id="run-pipeline-btn" class="btn btn-primary">Run pipeline now</button>
+        <a class="btn btn-ghost" href="/admin/queues" target="_blank">Queues →</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="stats-grid">
+        <div class="stat">
+          <div class="stat-label">Active markets</div>
+          <div class="stat-value" id="stat-markets">–</div>
+          <div class="stat-sub muted" id="stat-markets-sub">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Wallets seen</div>
+          <div class="stat-value" id="stat-wallets">–</div>
+          <div class="stat-sub muted">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Smart wallets</div>
+          <div class="stat-value" id="stat-smart">–</div>
+          <div class="stat-sub muted" id="stat-smart-sub">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Trades ingested</div>
+          <div class="stat-value" id="stat-trades">–</div>
+          <div class="stat-sub muted">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Alerts sent</div>
+          <div class="stat-value" id="stat-alerts">–</div>
+          <div class="stat-sub muted">&nbsp;</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Last pipeline run</h2>
+          <span class="muted" id="scheduler-info">scheduler: –</span>
+        </div>
+        <pre id="last-run">No run recorded yet.</pre>
+      </section>
+
+      <section class="row">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Top wallets</h2>
+            <span class="muted">by smartScore</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Address</th>
+                <th class="num">smartScore</th>
+                <th class="num">Volume</th>
+                <th>Last seen</th>
+              </tr>
+            </thead>
+            <tbody id="wallets-body">
+              <tr><td colspan="4" class="muted">loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Recent alerts</h2>
+            <span class="muted">latest 20</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Wallet</th>
+                <th>Market</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-body">
+              <tr><td colspan="3" class="muted">loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Active markets</h2>
+          <span class="muted">top by volume</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              <th>Category</th>
+              <th class="num">Volume</th>
+              <th>Ends</th>
+            </tr>
+          </thead>
+          <tbody id="markets-body">
+            <tr><td colspan="4" class="muted">loading…</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer class="muted">
+      <span id="last-refresh">–</span>
+      &nbsp;·&nbsp;
+      <a href="/health" target="_blank">/health</a>
+      &nbsp;·&nbsp;
+      <a href="/stats" target="_blank">/stats</a>
+      &nbsp;·&nbsp;
+      <a href="/admin/queues" target="_blank">Queues</a>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
