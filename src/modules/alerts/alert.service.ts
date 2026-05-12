@@ -8,7 +8,7 @@ function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function formatAlert(wallet: Wallet, market: Market, trade: WalletTrade): string {
+function formatSmartWalletAlert(wallet: Wallet, market: Market, trade: WalletTrade): string {
   const score = wallet.smartScore.toFixed(1);
   return [
     `*🧠 Smart wallet entered a new market*`,
@@ -25,6 +25,9 @@ export class AlertService {
   /**
    * Send a Telegram alert about a smart wallet entering a new market.
    * Uses AlertLog (walletAddress, marketId) unique constraint to prevent dupes.
+   *
+   * Note: the schema now supports nullable walletAddress/marketId for BTC
+   * signal alerts; this method still targets the original smart-wallet use-case.
    */
   async maybeSendNewMarketAlert(params: {
     wallet: Wallet;
@@ -37,17 +40,15 @@ export class AlertService {
 
     if (wallet.smartScore < threshold) return false;
 
-    const existing = await prisma.alertLog.findUnique({
+    const existing = await prisma.alertLog.findFirst({
       where: {
-        walletAddress_marketId: {
-          walletAddress: wallet.address,
-          marketId: market.id,
-        },
+        walletAddress: wallet.address,
+        marketId: market.id,
       },
     });
     if (existing) return false;
 
-    const message = formatAlert(wallet, market, trade);
+    const message = formatSmartWalletAlert(wallet, market, trade);
     const ok = await telegramClient.sendMessage(message);
 
     try {

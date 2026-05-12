@@ -13,6 +13,7 @@
     "sync:markets": "tsx src/scripts/syncMarkets.ts",
     "score:wallets": "tsx src/scripts/scoreWallets.ts",
     "pipeline:run": "tsx src/scripts/runPipeline.ts",
+    "smoke:btc": "tsx src/scripts/smokeTestBtc.ts",
     "worker:markets": "tsx src/modules/markets/market.worker.ts",
     "worker:wallets": "tsx src/modules/wallets/wallet.worker.ts",
     "worker:pipeline": "tsx src/modules/pipeline/pipeline.worker.ts",

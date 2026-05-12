@@ -78,14 +78,44 @@ function extractCategory(m: GammaMarket): string | null {
   return firstTag(m.tags);
 }
 
+/**
+ * Check whether a Polymarket market is a BTC short-duration prediction market.
+ *
+ * Matches terms like "btc", "bitcoin", "5 minute", "5 minutes", "5m",
+ * "15 minute", "15 minutes", "15m" in the question, slug, title, description,
+ * or tags. Avoids unrelated long-term BTC markets unless they are clearly 5m/15m.
+ */
+export function isBtcShortDurationMarket(m: GammaMarket): boolean {
+  const haystack = [
+    m.question,
+    m.slug,
+    typeof m.description === "string" ? m.description : "",
+    ...(Array.isArray(m.tags) ? m.tags.map((t) => tagLabel(t) ?? "") : []),
+    ...(Array.isArray(m.events)
+      ? (m.events as GammaNestedEvent[]).map((e) => e.title ?? "")
+      : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const hasBtc = /\b(btc|bitcoin)\b/.test(haystack);
+  if (!hasBtc) return false;
+
+  const hasShortDuration =
+    /\b(5\s*minute|5\s*minutes|5m|15\s*minute|15\s*minutes|15m)\b/.test(haystack);
+
+  return hasShortDuration;
+}
+
 export class MarketService {
   /**
    * Sync active markets from the Gamma API into Postgres. Paginates so we
    * actually cover the whole catalog (Polymarket has thousands of active
    * markets), and orders by volume descending so the highest-traffic
-   * markets (incl. crypto BTC/ETH prediction markets) always make it in
-   * even if `maxMarkets` is small.
+   * markets always make it in even if `maxMarkets` is small.
    *
+   * Only BTC 5m/15m markets are retained; everything else is skipped.
    * Idempotent: uses polymarketId as the upsert key.
    */
   async syncActiveMarkets(
@@ -104,9 +134,6 @@ export class MarketService {
         closed: false,
         limit,
         offset,
-        // TODO: Gamma's exact sort param varies. `volume` works against
-        // the field we already store. If the API ignores it, we just get
-        // default order — still better than no order at all.
         order: "volume",
         ascending: false,
         ...(opts.category ? { category: opts.category } : {}),
@@ -118,6 +145,15 @@ export class MarketService {
       for (const m of markets) {
         const polymarketId = String(m.id ?? m.conditionId ?? "").trim();
         if (!polymarketId) continue;
+
+        // --- BTC 5m/15m filter ---
+        if (!isBtcShortDurationMarket(m)) {
+          logger.debug(
+            { polymarketId, question: m.question },
+            "MarketService: skipped non-BTC-short-duration market",
+          );
+          continue;
+        }
 
         const tokenIds = parseTokenIds(m.clobTokenIds);
         const [tokenYes, tokenNo] = [tokenIds[0] ?? null, tokenIds[1] ?? null];

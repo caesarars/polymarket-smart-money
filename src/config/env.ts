@@ -35,10 +35,35 @@ const envSchema = z.object({
     .url()
     .default("wss://ws-subscriptions-clob.polymarket.com/ws/market"),
 
+  BINANCE_WS_URL: z
+    .string()
+    .url()
+    .default("wss://fstream.binance.com/stream"),
+
   TELEGRAM_BOT_TOKEN: optionalString(256),
   TELEGRAM_CHAT_ID: optionalString(128),
 
   SMART_WALLET_SCORE_THRESHOLD: z.coerce.number().min(0).max(100).default(75),
+
+  /**
+   * Minimum absolute edge (difference between model probability and Polymarket
+   * mid price) required to generate a signal. Range 0–1.
+   */
+  EDGE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.07),
+  /**
+   * Minimum Polymarket liquidity (in USD) for a market to be considered for
+   * signal generation.
+   */
+  MIN_LIQUIDITY: z.coerce.number().min(0).default(1000),
+  /**
+   * Maximum acceptable spread (bestAsk − bestBid) on a Polymarket book.
+   * Markets wider than this are skipped.
+   */
+  MIN_SPREAD_MAX: z.coerce.number().min(0).max(1).default(0.05),
+  /**
+   * Cooldown between duplicate alerts for the same market + side, in seconds.
+   */
+  ALERT_COOLDOWN_SECONDS: z.coerce.number().int().min(0).default(60),
 
   /**
    * Pipeline auto-scheduler interval, in minutes. Set to 0 (or unset) to disable

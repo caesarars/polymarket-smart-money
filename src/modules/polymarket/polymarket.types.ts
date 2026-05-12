@@ -19,6 +19,7 @@ export interface GammaMarket {
   id: string | number;
   question: string;
   slug?: string;
+  description?: string;
   /**
    * Often absent on modern Gamma responses — the human-facing category lives
    * on the parent event (`events[].category`) or on `tags`. Resolve via

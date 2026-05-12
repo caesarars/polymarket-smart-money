@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { env } from "../../config/env";
 import { logger } from "../../lib/logger";
+import { signalService } from "../signals/signal.service";
 import { ClobWsMessage } from "./polymarket.types";
 
 export type ClobEventHandler = (msg: ClobWsMessage) => void;
@@ -165,6 +166,10 @@ export class ClobWebSocketClient {
         { event: typed.event_type, market: typed.market, asset: typed.asset_id },
         "ClobWebSocketClient: event",
       );
+
+      // --- BTC odds tracking: normalise best bid/ask into PolymarketOdds ---
+      this.maybeTrackOdds(typed);
+
       for (const handler of this.handlers) {
         try {
           handler(typed);
@@ -173,6 +178,53 @@ export class ClobWebSocketClient {
         }
       }
     }
+  }
+
+  private maybeTrackOdds(msg: ClobWsMessage): void {
+    // The CLOB WS sends "book" events with bids/asks arrays, or
+    // "last_trade_price" with a single price. We normalise whatever we can.
+    if (msg.event_type !== "book" && msg.event_type !== "last_trade_price") {
+      return;
+    }
+
+    const assetId = typeof msg.asset_id === "string" ? msg.asset_id : undefined;
+    if (!assetId) return;
+
+    let bestBid = 0;
+    let bestAsk = 0;
+
+    if (msg.event_type === "book" && Array.isArray(msg.bids) && Array.isArray(msg.asks)) {
+      const bids = msg.bids as Array<{ price?: string | number; size?: string | number }>;
+      const asks = msg.asks as Array<{ price?: string | number; size?: string | number }>;
+      const topBid = bids[0];
+      const topAsk = asks[0];
+      if (topBid) bestBid = typeof topBid.price === "string" ? parseFloat(topBid.price) : Number(topBid.price) || 0;
+      if (topAsk) bestAsk = typeof topAsk.price === "string" ? parseFloat(topAsk.price) : Number(topAsk.price) || 0;
+    } else if (msg.event_type === "last_trade_price" && typeof msg.price === "string") {
+      const price = parseFloat(msg.price);
+      bestBid = price;
+      bestAsk = price;
+    }
+
+    if (bestBid <= 0 && bestAsk <= 0) return;
+
+    // Map asset_id back to Market via a lightweight in-memory lookup.
+    // Because we don't have the marketId in the WS message, we rely on
+    // signalService to resolve it. For now we pass assetId as the tokenId
+    // and let the signal layer match it.
+    const mid = bestBid > 0 && bestAsk > 0 ? (bestBid + bestAsk) / 2 : bestBid || bestAsk;
+    const spread = bestAsk > 0 && bestBid > 0 ? bestAsk - bestBid : 0;
+
+    // Fire-and-forget: don't block the WS loop on DB writes.
+    void signalService.onOddsUpdate({
+      marketId: assetId, // temporary; signalService will resolve via lookup if needed
+      tokenId: assetId,
+      bestBid,
+      bestAsk,
+      midPrice: mid,
+      spread,
+      timestamp: Date.now(),
+    });
   }
 }
 

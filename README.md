@@ -212,6 +212,43 @@ Pasang di cron VPS (mis. harian) dan rsync ke storage lain.
 
 Kalau `PIPELINE_INTERVAL_MINUTES > 0`, server akan otomatis register repeatable job di BullMQ (lihat [pipeline.scheduler.ts](src/modules/pipeline/pipeline.scheduler.ts)). Ubah angka di `.env`, lalu `docker compose up -d app` — schedule lama dibersihkan dan diganti dengan yang baru.
 
+## BTC 5m/15m Strategy
+
+This project has been refactored into a **Binance-led Polymarket BTC short-duration intelligence engine**.
+
+### How it works
+
+1. **Binance is the primary signal source**. We stream real-time BTCUSDT futures data (trades, mark price, order book, liquidations) from Binance.
+2. **Rolling metrics engine** computes BTC velocity (5s / 15s / 60s), volatility expansion, orderflow imbalance, bid-ask spread, and liquidation pressure — all in-memory.
+3. **Model probability** is derived from the Binance signal score via a simple configurable formula.
+4. **Polymarket odds tracker** subscribes to the Polymarket CLOB WebSocket for every active BTC 5-minute or 15-minute market and tracks best bid, best ask, and mid price.
+5. **Discrepancy detector** compares the Binance model probability against the Polymarket mid-price probability. When the absolute edge exceeds `EDGE_THRESHOLD` (default 7%), a `BtcSignal` is generated.
+6. **Telegram alerts** fire for high-confidence edges, with a per-market + per-side cooldown (`ALERT_COOLDOWN_SECONDS`).
+
+### What is NOT implemented
+
+- **No auto-trading or real-money execution**. The system only collects data, calculates signals, stores them, sends alerts, and exposes APIs.
+- **No wallet scoring for BTC markets**. The original smart-wallet pipeline still runs but is orthogonal to the BTC signal flow.
+
+### Relevant environment variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `BINANCE_WS_URL` | `wss://fstream.binance.com/stream` | Binance combined stream endpoint. |
+| `EDGE_THRESHOLD` | `0.07` | Minimum absolute edge (0–1) to trigger a signal. |
+| `MIN_LIQUIDITY` | `1000` | Minimum market volume (USD) to consider. |
+| `MIN_SPREAD_MAX` | `0.05` | Maximum acceptable book spread (0–1). |
+| `ALERT_COOLDOWN_SECONDS` | `60` | Cooldown between duplicate alerts for the same market + side. |
+
+### New HTTP endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/btc/markets` | Active BTC 5m/15m markets. |
+| `GET` | `/btc/metrics` | Latest Binance BTC metrics + signal score. |
+| `GET` | `/btc/signals/latest` | Most recent 20 signals. |
+| `GET` | `/btc/signals/history` | Queryable signal history (`?marketId=&side=&limit=`). |
+
 ## Roadmap
 
 - **Better PnL**: ingest closed positions from the data API and compute realized PnL per market, not just per wallet.

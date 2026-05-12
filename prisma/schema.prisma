@@ -23,7 +23,9 @@ model Market {
 
   trades            WalletTrade[]
   orderbookSnaps    OrderbookSnapshot[]
+  btcMarketSnaps    BtcMarketSnapshot[]
   alerts            AlertLog[]
+  btcSignals        BtcSignal[]
 
   @@index([isActive])
   @@index([endDate])
@@ -90,16 +92,21 @@ model WalletScore {
 
 model AlertLog {
   id             String   @id @default(cuid())
-  walletAddress  String
-  marketId       String
+  walletAddress  String?
+  marketId       String?
+  signalId       String?
+  side           String?
+  cooldownKey    String?
   message        String
   sentAt         DateTime @default(now())
 
-  wallet  Wallet  @relation(fields: [walletAddress], references: [address], onDelete: Cascade)
-  market  Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  wallet  Wallet?  @relation(fields: [walletAddress], references: [address], onDelete: Cascade)
+  market  Market?  @relation(fields: [marketId], references: [id], onDelete: Cascade)
 
-  @@unique([walletAddress, marketId])
   @@index([sentAt])
+  @@index([marketId])
+  @@index([side])
+  @@index([cooldownKey])
 }
 
 model OrderbookSnapshot {
@@ -117,4 +124,40 @@ model OrderbookSnapshot {
   @@index([marketId])
   @@index([tokenId])
   @@index([timestamp])
+}
+
+model BtcMarketSnapshot {
+  id        String   @id @default(cuid())
+  marketId  String
+  tokenId   String
+  bestBid   Decimal  @db.Decimal(18, 8)
+  bestAsk   Decimal  @db.Decimal(18, 8)
+  midPrice  Decimal  @db.Decimal(18, 8)
+  spread    Decimal  @db.Decimal(18, 8)
+  timestamp DateTime
+  rawJson   Json
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
+  @@index([timestamp])
+}
+
+model BtcSignal {
+  id                   String   @id @default(cuid())
+  marketId             String
+  side                 String
+  polymarketProbability Decimal  @db.Decimal(18, 8)
+  modelProbability     Decimal  @db.Decimal(18, 8)
+  edge                 Decimal  @db.Decimal(18, 8)
+  confidence           String
+  reason               String
+  timestamp            DateTime @default(now())
+  rawJson              Json
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
+  @@index([timestamp])
+  @@index([side])
 }

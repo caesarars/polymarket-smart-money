@@ -167,9 +167,10 @@ export class PipelineService {
       smartWallets += 1;
 
       for (const marketId of marketIds) {
-        const alreadyAlerted = await prisma.alertLog.findUnique({
+        const alreadyAlerted = await prisma.alertLog.findFirst({
           where: {
-            walletAddress_marketId: { walletAddress: address, marketId },
+            walletAddress: address,
+            marketId,
           },
           select: { id: true },
         });

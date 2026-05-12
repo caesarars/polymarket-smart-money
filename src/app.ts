@@ -12,6 +12,7 @@ import {
   syncMarketsQueue,
 } from "./modules/jobs/queues";
 import { alertsRouter } from "./routes/alerts.route";
+import { btcRouter } from "./routes/btc.route";
 import { healthRouter } from "./routes/health.route";
 import { marketsRouter } from "./routes/markets.route";
 import { pipelineRouter } from "./routes/pipeline.route";
@@ -37,7 +38,8 @@ export function createApp(): express.Express {
             url === "/stats" ||
             url.startsWith("/alerts/recent") ||
             url.startsWith("/wallets/top") ||
-            url.startsWith("/markets/active")
+            url.startsWith("/markets/active") ||
+            url.startsWith("/btc/")
           );
         },
       },
@@ -73,6 +75,7 @@ export function createApp(): express.Express {
   app.use(marketsRouter);
   app.use(walletsRouter);
   app.use(pipelineRouter);
+  app.use(btcRouter);
 
   // --- Static dashboard (HTML/CSS/JS that polls the JSON API) ---
   app.use(express.static(PUBLIC_DIR, { fallthrough: true, index: "index.html" }));
