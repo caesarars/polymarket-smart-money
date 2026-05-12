@@ -3,6 +3,7 @@ import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { gammaClient } from "../polymarket/gamma.client";
 import {
+  GammaEvent,
   GammaMarket,
   GammaNestedEvent,
   GammaTag,
@@ -108,24 +109,96 @@ export function isBtcShortDurationMarket(m: GammaMarket): boolean {
   return hasShortDuration;
 }
 
+/**
+ * Same filter logic but applied to an Event (which has `title` instead of `question`).
+ */
+function isBtcShortDurationEvent(e: GammaEvent): boolean {
+  const haystack = [
+    e.title,
+    e.slug,
+    typeof e.description === "string" ? e.description : "",
+    ...(Array.isArray(e.tags) ? e.tags.map((t) => tagLabel(t) ?? "") : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const hasBtc = /\b(btc|bitcoin)\b/.test(haystack);
+  if (!hasBtc) return false;
+
+  const hasShortDuration =
+    /\b(5\s*minute|5\s*minutes|5m|15\s*minute|15\s*minutes|15m)\b/.test(haystack);
+
+  return hasShortDuration;
+}
+
+async function upsertMarketFromGamma(m: GammaMarket): Promise<boolean> {
+  const polymarketId = String(m.id ?? m.conditionId ?? "").trim();
+  if (!polymarketId) return false;
+
+  const tokenIds = parseTokenIds(m.clobTokenIds);
+  const [tokenYes, tokenNo] = [tokenIds[0] ?? null, tokenIds[1] ?? null];
+
+  try {
+    await prisma.market.upsert({
+      where: { polymarketId },
+      create: {
+        polymarketId,
+        question: m.question ?? "(unknown)",
+        slug: m.slug ?? null,
+        category: extractCategory(m),
+        endDate: parseEndDate(m.endDate),
+        volume: toNumber(m.volume),
+        tokenYes,
+        tokenNo,
+        isActive: m.active !== false && m.closed !== true,
+      },
+      update: {
+        question: m.question ?? "(unknown)",
+        slug: m.slug ?? null,
+        category: extractCategory(m),
+        endDate: parseEndDate(m.endDate),
+        volume: toNumber(m.volume),
+        tokenYes,
+        tokenNo,
+        isActive: m.active !== false && m.closed !== true,
+      },
+    });
+    return true;
+  } catch (err) {
+    logger.error({ err, polymarketId }, "MarketService: upsert failed");
+    return false;
+  }
+}
+
 export class MarketService {
   /**
-   * Sync active markets from the Gamma API into Postgres. Paginates so we
-   * actually cover the whole catalog (Polymarket has thousands of active
-   * markets), and orders by volume descending so the highest-traffic
-   * markets always make it in even if `maxMarkets` is small.
+   * Sync active BTC 5m/15m markets from the Gamma API into Postgres.
    *
-   * Only BTC 5m/15m markets are retained; everything else is skipped.
+   * Strategy:
+   *   1. Scan all active events — BTC short-duration events (like "BTC Up or Down 5m")
+   *      are grouped as events and often have low individual-market volume, so they
+   *      are invisible when paginating markets by volume.
+   *   2. For every matching event, extract its nested markets and upsert them.
+   *   3. Fallback: also paginate the /markets endpoint (volume-desc) in case a BTC
+   *      market exists standalone outside of an event.
+   *
    * Idempotent: uses polymarketId as the upsert key.
    */
   async syncActiveMarkets(
     maxMarkets = 2000,
     opts: { category?: string } = {},
   ): Promise<{ synced: number; pages: number }> {
-    const pageSize = 100;
-    let offset = 0;
     let synced = 0;
     let pages = 0;
+
+    // --- Phase 1: Event-based discovery (crucial for BTC 5m/15m) ---
+    const eventSynced = await this.syncBtcMarketsFromEvents();
+    synced += eventSynced;
+
+    // --- Phase 2: Market pagination fallback ---
+    const pageSize = 100;
+    let offset = 0;
 
     while (offset < maxMarkets) {
       const limit = Math.min(pageSize, maxMarkets - offset);
@@ -143,53 +216,17 @@ export class MarketService {
       pages += 1;
 
       for (const m of markets) {
-        const polymarketId = String(m.id ?? m.conditionId ?? "").trim();
-        if (!polymarketId) continue;
-
-        // --- BTC 5m/15m filter ---
         if (!isBtcShortDurationMarket(m)) {
           logger.debug(
-            { polymarketId, question: m.question },
+            { polymarketId: m.id, question: m.question },
             "MarketService: skipped non-BTC-short-duration market",
           );
           continue;
         }
-
-        const tokenIds = parseTokenIds(m.clobTokenIds);
-        const [tokenYes, tokenNo] = [tokenIds[0] ?? null, tokenIds[1] ?? null];
-
-        try {
-          await prisma.market.upsert({
-            where: { polymarketId },
-            create: {
-              polymarketId,
-              question: m.question ?? "(unknown)",
-              slug: m.slug ?? null,
-              category: extractCategory(m),
-              endDate: parseEndDate(m.endDate),
-              volume: toNumber(m.volume),
-              tokenYes,
-              tokenNo,
-              isActive: m.active !== false && m.closed !== true,
-            },
-            update: {
-              question: m.question ?? "(unknown)",
-              slug: m.slug ?? null,
-              category: extractCategory(m),
-              endDate: parseEndDate(m.endDate),
-              volume: toNumber(m.volume),
-              tokenYes,
-              tokenNo,
-              isActive: m.active !== false && m.closed !== true,
-            },
-          });
-          synced += 1;
-        } catch (err) {
-          logger.error({ err, polymarketId }, "MarketService: upsert failed");
-        }
+        const ok = await upsertMarketFromGamma(m);
+        if (ok) synced += 1;
       }
 
-      // Page wasn't full → no more results from Gamma.
       if (markets.length < limit) break;
       offset += limit;
     }
@@ -197,7 +234,7 @@ export class MarketService {
     if (synced === 0) {
       logger.warn(
         { opts },
-        "MarketService.syncActiveMarkets: no markets returned",
+        "MarketService.syncActiveMarkets: no BTC markets returned",
       );
     } else {
       logger.info(
@@ -206,6 +243,71 @@ export class MarketService {
       );
     }
     return { synced, pages };
+  }
+
+  /**
+   * Scan active events and extract BTC short-duration markets.
+   * Returns the count of markets synced.
+   */
+  private async syncBtcMarketsFromEvents(): Promise<number> {
+    const pageSize = 100;
+    let offset = 0;
+    let synced = 0;
+    let pages = 0;
+
+    while (true) {
+      const events = await gammaClient.getEvents({
+        active: true,
+        closed: false,
+        limit: pageSize,
+        offset,
+      });
+
+      if (events.length === 0) break;
+      pages += 1;
+
+      for (const e of events) {
+        if (!isBtcShortDurationEvent(e)) continue;
+
+        const markets = e.markets ?? [];
+        for (const m of markets) {
+          // Enrich the nested market with event context so extractCategory works
+          const enriched: GammaMarket = {
+            ...m,
+            events: [
+              {
+                id: e.id,
+                title: e.title,
+                slug: e.slug,
+                category: e.category,
+                tags: e.tags,
+              } as GammaNestedEvent,
+            ],
+          };
+          const ok = await upsertMarketFromGamma(enriched);
+          if (ok) {
+            synced += 1;
+            logger.debug(
+              { eventSlug: e.slug, marketId: m.id, question: m.question },
+              "MarketService: synced BTC market from event",
+            );
+          }
+        }
+      }
+
+      if (events.length < pageSize) break;
+      offset += pageSize;
+      // Safety valve — don't scan forever
+      if (offset > 5_000) {
+        logger.warn("MarketService: event scan hit safety limit (5000), stopping");
+        break;
+      }
+    }
+
+    if (synced > 0) {
+      logger.info({ synced, pages }, "MarketService: event-based BTC sync complete");
+    }
+    return synced;
   }
 
   async getActiveMarkets(

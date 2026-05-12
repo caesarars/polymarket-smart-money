@@ -43,7 +43,9 @@ export interface GammaEvent {
   id: string | number;
   title: string;
   slug?: string;
+  description?: string;
   category?: string;
+  tags?: GammaTag[];
   endDate?: string;
   markets?: GammaMarket[];
 }
