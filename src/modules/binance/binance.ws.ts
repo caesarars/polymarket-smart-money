@@ -5,20 +5,26 @@ import { BinanceStreamEvent } from "./binance.types";
 
 export type BinanceEventHandler = (event: BinanceStreamEvent) => void;
 
-const SUBSCRIBE_MESSAGE = {
-  method: "SUBSCRIBE",
-  params: [
-    "btcusdt@aggTrade",
-    "btcusdt@markPrice@1s",
-    "btcusdt@bookTicker",
-    "btcusdt@forceOrder",
-  ],
-  id: 1,
-};
+const STREAMS = [
+  "btcusdt@aggTrade",
+  "btcusdt@markPrice@1s",
+  "btcusdt@bookTicker",
+  "btcusdt@forceOrder",
+].join("/");
+
+function buildUrl(base: string): string {
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}streams=${STREAMS}`;
+}
+
+interface BinanceCombinedMessage {
+  stream?: string;
+  data?: BinanceStreamEvent;
+}
 
 export class BinanceWebSocketClient {
   private ws: WebSocket | null = null;
-  private readonly url: string;
+  private readonly baseUrl: string;
   private readonly handlers: Set<BinanceEventHandler> = new Set();
   private reconnectAttempts = 0;
   private readonly maxReconnectDelayMs = 30_000;
@@ -26,8 +32,8 @@ export class BinanceWebSocketClient {
   private shouldRun = false;
   private pingInterval: NodeJS.Timeout | null = null;
 
-  constructor(url: string = env.BINANCE_WS_URL) {
-    this.url = url;
+  constructor(baseURL: string = env.BINANCE_WS_URL) {
+    this.baseUrl = baseURL;
   }
 
   onEvent(handler: BinanceEventHandler): () => void {
@@ -57,14 +63,14 @@ export class BinanceWebSocketClient {
   }
 
   private openSocket(): void {
-    logger.info({ url: this.url }, "BinanceWebSocketClient: connecting");
-    const ws = new WebSocket(this.url);
+    const url = buildUrl(this.baseUrl);
+    logger.info({ url }, "BinanceWebSocketClient: connecting");
+    const ws = new WebSocket(url);
     this.ws = ws;
 
     ws.on("open", () => {
       this.reconnectAttempts = 0;
       logger.info("BinanceWebSocketClient: connected");
-      this.sendSubscription();
       this.startHeartbeat();
     });
 
@@ -122,16 +128,6 @@ export class BinanceWebSocketClient {
     }, delay);
   }
 
-  private sendSubscription(): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    try {
-      this.ws.send(JSON.stringify(SUBSCRIBE_MESSAGE));
-      logger.info("BinanceWebSocketClient: subscription sent");
-    } catch (err) {
-      logger.error({ err }, "BinanceWebSocketClient: failed to send subscription");
-    }
-  }
-
   private handleRaw(raw: WebSocket.RawData): void {
     let text: string;
     if (typeof raw === "string") text = raw;
@@ -151,15 +147,24 @@ export class BinanceWebSocketClient {
 
     if (!parsed || typeof parsed !== "object") return;
 
-    // Ignore subscription confirmation frames (they have "result" key)
-    if ("result" in parsed) return;
+    // Combined stream wraps events: { stream: "...", data: { e: "aggTrade", ... } }
+    const combined = parsed as BinanceCombinedMessage;
+    if (combined.stream && combined.data) {
+      const event = combined.data;
+      logger.debug({ stream: combined.stream, event: event.e }, "BinanceWebSocketClient: event");
+      this.dispatchEvent(event);
+      return;
+    }
 
+    // Fallback: handle raw event (for raw stream endpoint compatibility)
     const event = parsed as BinanceStreamEvent;
-    logger.debug(
-      { event: event.e },
-      "BinanceWebSocketClient: event",
-    );
+    if (event.e) {
+      logger.debug({ event: event.e }, "BinanceWebSocketClient: raw event");
+      this.dispatchEvent(event);
+    }
+  }
 
+  private dispatchEvent(event: BinanceStreamEvent): void {
     for (const handler of this.handlers) {
       try {
         handler(event);
