@@ -4,32 +4,51 @@ import {
   calculateBtcSignalScore,
   btcSignalScoreToProbability,
 } from "./binance.metrics";
+import { binanceRestClient } from "./binance.rest";
 import { binanceWebSocketClient } from "./binance.ws";
 import { BtcMetrics } from "./binance.types";
 
 export class BinanceService {
   private readonly metricsEngine = new BinanceMetricsEngine();
-  private unsubscribe: (() => void) | null = null;
+  private wsUnsubscribe: (() => void) | null = null;
+  private restUnsubscribe: (() => void) | null = null;
   private latestMetrics: BtcMetrics | null = null;
   private latestSignalScore = 0;
   private latestProbability = 0.5;
 
   start(): void {
-    if (this.unsubscribe) return;
-    this.unsubscribe = binanceWebSocketClient.onEvent((event) => {
-      this.metricsEngine.onEvent(event);
-      this.updateSnapshot();
-    });
-    binanceWebSocketClient.connect();
-    logger.info("BinanceService: started");
+    // --- WebSocket (primary) ---
+    if (!this.wsUnsubscribe) {
+      this.wsUnsubscribe = binanceWebSocketClient.onEvent((event) => {
+        this.metricsEngine.onEvent(event);
+        this.updateSnapshot();
+      });
+      binanceWebSocketClient.connect();
+    }
+
+    // --- REST polling (fallback / supplement) ---
+    if (!this.restUnsubscribe) {
+      this.restUnsubscribe = binanceRestClient.onEvent((event) => {
+        this.metricsEngine.onEvent(event);
+        this.updateSnapshot();
+      });
+      binanceRestClient.start(2_000);
+    }
+
+    logger.info("BinanceService: started (WS + REST)");
   }
 
   stop(): void {
-    if (this.unsubscribe) {
-      this.unsubscribe();
-      this.unsubscribe = null;
+    if (this.wsUnsubscribe) {
+      this.wsUnsubscribe();
+      this.wsUnsubscribe = null;
+    }
+    if (this.restUnsubscribe) {
+      this.restUnsubscribe();
+      this.restUnsubscribe = null;
     }
     binanceWebSocketClient.close();
+    binanceRestClient.stop();
     logger.info("BinanceService: stopped");
   }
 
