@@ -10,7 +10,15 @@ export const btcRouter = Router();
 btcRouter.get("/btc/markets", async (_req, res) => {
   try {
     const markets = await prisma.market.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [
+          { question: { contains: "btc", mode: "insensitive" } },
+          { question: { contains: "bitcoin", mode: "insensitive" } },
+          { slug: { contains: "btc", mode: "insensitive" } },
+          { slug: { contains: "bitcoin", mode: "insensitive" } },
+        ],
+      },
       orderBy: [{ volume: "desc" }],
       take: 50,
     });
