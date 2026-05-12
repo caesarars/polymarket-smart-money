@@ -2,7 +2,11 @@ import { Market } from "@prisma/client";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { gammaClient } from "../polymarket/gamma.client";
-import { GammaMarket } from "../polymarket/polymarket.types";
+import {
+  GammaMarket,
+  GammaNestedEvent,
+  GammaTag,
+} from "../polymarket/polymarket.types";
 
 function parseTokenIds(raw: GammaMarket["clobTokenIds"]): string[] {
   if (!raw) return [];
@@ -30,6 +34,48 @@ function parseEndDate(raw: GammaMarket["endDate"]): Date | null {
   if (!raw) return null;
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function tagLabel(tag: GammaTag): string | null {
+  if (typeof tag === "string") {
+    const s = tag.trim();
+    return s.length > 0 ? s : null;
+  }
+  if (tag && typeof tag === "object") {
+    if (typeof tag.label === "string" && tag.label.trim()) return tag.label.trim();
+    if (typeof tag.slug === "string" && tag.slug.trim()) return tag.slug.trim();
+  }
+  return null;
+}
+
+function firstTag(tags: GammaTag[] | undefined): string | null {
+  if (!Array.isArray(tags)) return null;
+  for (const t of tags) {
+    const label = tagLabel(t);
+    if (label) return label;
+  }
+  return null;
+}
+
+/**
+ * Resolve a market's display category. Gamma's modern responses often leave
+ * `market.category` empty — the canonical category lives on the parent event,
+ * with a tags array as a final fallback.
+ */
+function extractCategory(m: GammaMarket): string | null {
+  if (typeof m.category === "string" && m.category.trim()) {
+    return m.category.trim();
+  }
+  if (Array.isArray(m.events)) {
+    for (const e of m.events as GammaNestedEvent[]) {
+      if (typeof e?.category === "string" && e.category.trim()) {
+        return e.category.trim();
+      }
+      const fromEventTags = firstTag(e?.tags);
+      if (fromEventTags) return fromEventTags;
+    }
+  }
+  return firstTag(m.tags);
 }
 
 export class MarketService {
@@ -83,7 +129,7 @@ export class MarketService {
               polymarketId,
               question: m.question ?? "(unknown)",
               slug: m.slug ?? null,
-              category: m.category ?? null,
+              category: extractCategory(m),
               endDate: parseEndDate(m.endDate),
               volume: toNumber(m.volume),
               tokenYes,
@@ -93,7 +139,7 @@ export class MarketService {
             update: {
               question: m.question ?? "(unknown)",
               slug: m.slug ?? null,
-              category: m.category ?? null,
+              category: extractCategory(m),
               endDate: parseEndDate(m.endDate),
               volume: toNumber(m.volume),
               tokenYes,

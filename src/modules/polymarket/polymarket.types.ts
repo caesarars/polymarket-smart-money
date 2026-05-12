@@ -1,11 +1,32 @@
 // TODO: response shapes are based on Polymarket public docs at time of writing.
 // Adjust these once you have concrete sample responses captured in fixtures.
 
+/**
+ * Tag entry on a Gamma market/event. The API has shifted shape over time;
+ * we've seen both bare strings and object form.
+ */
+export type GammaTag = string | { id?: string | number; label?: string; slug?: string };
+
+export interface GammaNestedEvent {
+  id?: string | number;
+  title?: string;
+  slug?: string;
+  category?: string;
+  tags?: GammaTag[];
+}
+
 export interface GammaMarket {
   id: string | number;
   question: string;
   slug?: string;
+  /**
+   * Often absent on modern Gamma responses — the human-facing category lives
+   * on the parent event (`events[].category`) or on `tags`. Resolve via
+   * `extractCategory()` instead of reading this directly.
+   */
   category?: string;
+  tags?: GammaTag[];
+  events?: GammaNestedEvent[];
   endDate?: string;
   volume?: number | string;
   active?: boolean;
