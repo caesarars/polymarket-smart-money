@@ -25,7 +25,15 @@ let clobSubscriptionInterval: NodeJS.Timeout | null = null;
 async function subscribeToBtcMarkets(): Promise<void> {
   try {
     const markets = await prismaClient.market.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [
+          { question: { contains: "btc", mode: "insensitive" } },
+          { question: { contains: "bitcoin", mode: "insensitive" } },
+          { slug: { contains: "btc", mode: "insensitive" } },
+          { slug: { contains: "bitcoin", mode: "insensitive" } },
+        ],
+      },
       select: { tokenYes: true, tokenNo: true },
     });
     const tokenIds: string[] = [];

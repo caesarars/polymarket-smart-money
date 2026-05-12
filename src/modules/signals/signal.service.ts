@@ -82,7 +82,15 @@ export class SignalService {
     }
 
     const markets = await prisma.market.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [
+          { question: { contains: "btc", mode: "insensitive" } },
+          { question: { contains: "bitcoin", mode: "insensitive" } },
+          { slug: { contains: "btc", mode: "insensitive" } },
+          { slug: { contains: "bitcoin", mode: "insensitive" } },
+        ],
+      },
     });
 
     const signals: BtcSignalOutput[] = [];
