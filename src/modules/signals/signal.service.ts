@@ -73,58 +73,63 @@ export class SignalService {
    * continuously as both Binance and Polymarket data update.
    */
   async scanForSignals(): Promise<BtcSignalOutput[]> {
-    const modelProbability = binanceService.getLatestProbability();
-    const metrics = binanceService.getLatestMetrics();
+    try {
+      const modelProbability = binanceService.getLatestProbability();
+      const metrics = binanceService.getLatestMetrics();
 
-    if (!metrics || modelProbability === undefined || modelProbability === null) {
-      logger.debug("SignalService: no Binance metrics yet, skipping scan");
-      return [];
-    }
-
-    const markets = await prisma.market.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { question: { contains: "btc", mode: "insensitive" } },
-          { question: { contains: "bitcoin", mode: "insensitive" } },
-          { slug: { contains: "btc", mode: "insensitive" } },
-          { slug: { contains: "bitcoin", mode: "insensitive" } },
-        ],
-      },
-    });
-
-    const signals: BtcSignalOutput[] = [];
-
-    for (const market of markets) {
-      const odds = this.oddsMap.get(market.id);
-      if (!odds) continue;
-
-      const signal = discrepancyDetector.detect(market, odds, modelProbability);
-      if (!signal) continue;
-
-      signals.push(signal);
-
-      try {
-        await prisma.btcSignal.create({
-          data: {
-            marketId: signal.marketId,
-            side: signal.side,
-            polymarketProbability: signal.polymarketProbability,
-            modelProbability: signal.modelProbability,
-            edge: signal.edge,
-            confidence: signal.confidence,
-            reason: signal.reason,
-            rawJson: signal as unknown as any,
-          },
-        });
-      } catch (err) {
-        logger.error({ err, signal }, "SignalService: failed to persist BtcSignal");
+      if (!metrics || modelProbability === undefined || modelProbability === null) {
+        logger.debug("SignalService: no Binance metrics yet, skipping scan");
+        return [];
       }
 
-      await this.maybeSendAlert(signal, metrics);
-    }
+      const markets = await prisma.market.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { question: { contains: "btc", mode: "insensitive" } },
+            { question: { contains: "bitcoin", mode: "insensitive" } },
+            { slug: { contains: "btc", mode: "insensitive" } },
+            { slug: { contains: "bitcoin", mode: "insensitive" } },
+          ],
+        },
+      });
 
-    return signals;
+      const signals: BtcSignalOutput[] = [];
+
+      for (const market of markets) {
+        const odds = this.oddsMap.get(market.id);
+        if (!odds) continue;
+
+        const signal = discrepancyDetector.detect(market, odds, modelProbability);
+        if (!signal) continue;
+
+        signals.push(signal);
+
+        try {
+          await prisma.btcSignal.create({
+            data: {
+              marketId: signal.marketId,
+              side: signal.side,
+              polymarketProbability: signal.polymarketProbability,
+              modelProbability: signal.modelProbability,
+              edge: signal.edge,
+              confidence: signal.confidence,
+              reason: signal.reason,
+              rawJson: signal as unknown as any,
+            },
+          });
+        } catch (err) {
+          logger.error({ err, signal }, "SignalService: failed to persist BtcSignal");
+        }
+
+        await this.maybeSendAlert(signal, metrics);
+      }
+
+      return signals;
+    } catch (err) {
+      logger.error({ err }, "SignalService: scanForSignals failed");
+      return [];
+    }
   }
 
   private async maybeSendAlert(

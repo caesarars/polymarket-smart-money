@@ -17,14 +17,13 @@ import { startPipelineWorker } from "./modules/pipeline/pipeline.worker";
 import { binanceService } from "./modules/binance/binance.service";
 import { clobWebSocketClient } from "./modules/polymarket/clob.ws";
 import { signalService } from "./modules/signals/signal.service";
-import { prisma as prismaClient } from "./lib/prisma";
 
 let signalScanInterval: NodeJS.Timeout | null = null;
 let clobSubscriptionInterval: NodeJS.Timeout | null = null;
 
 async function subscribeToBtcMarkets(): Promise<void> {
   try {
-    const markets = await prismaClient.market.findMany({
+    const markets = await prisma.market.findMany({
       where: {
         isActive: true,
         OR: [
@@ -77,11 +76,17 @@ async function main(): Promise<void> {
     void subscribeToBtcMarkets();
   }, 60_000);
   // Initial subscription after a short delay so markets may already be in DB.
-  setTimeout(() => void subscribeToBtcMarkets(), 5_000);
+  setTimeout(() => {
+    subscribeToBtcMarkets().catch((err) => {
+      logger.error({ err }, "Initial CLOB subscription failed");
+    });
+  }, 5_000);
 
   // --- Signal scanner: run every 5 seconds ---
   signalScanInterval = setInterval(() => {
-    void signalService.scanForSignals();
+    signalService.scanForSignals().catch((err) => {
+      logger.error({ err }, "Signal scanner error");
+    });
   }, 5_000);
 
   const server = app.listen(env.PORT, () => {

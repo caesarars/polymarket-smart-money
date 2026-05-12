@@ -5,8 +5,10 @@ ALTER TABLE "AlertLog" ADD COLUMN IF NOT EXISTS "signalId" TEXT;
 ALTER TABLE "AlertLog" ADD COLUMN IF NOT EXISTS "side" TEXT;
 ALTER TABLE "AlertLog" ADD COLUMN IF NOT EXISTS "cooldownKey" TEXT;
 
--- Drop old unique constraint (walletAddress, marketId)
+-- Drop old unique constraint / index (walletAddress, marketId)
+-- Note: init migration created this as a UNIQUE INDEX, not a CONSTRAINT.
 ALTER TABLE "AlertLog" DROP CONSTRAINT IF EXISTS "AlertLog_walletAddress_marketId_key";
+DROP INDEX IF EXISTS "AlertLog_walletAddress_marketId_key";
 
 -- CreateIndex: AlertLog new indexes
 CREATE INDEX IF NOT EXISTS "AlertLog_marketId_idx" ON "AlertLog"("marketId");
