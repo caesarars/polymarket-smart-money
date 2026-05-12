@@ -17,10 +17,12 @@ alertsRouter.get("/alerts/recent", async (req, res) => {
 
   try {
     const alerts = await prisma.alertLog.findMany({
+      where: {
+        side: { not: null },
+      },
       take: parsed.data.limit,
       orderBy: { sentAt: "desc" },
       include: {
-        wallet: { select: { address: true, smartScore: true } },
         market: { select: { question: true, slug: true, polymarketId: true } },
       },
     });
