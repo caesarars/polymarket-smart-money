@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 import {
   BinanceAggTrade,
   BinanceBookTicker,
@@ -64,6 +65,7 @@ export class BinanceMetricsEngine {
         this.handleForceOrder(event);
         break;
       default:
+        logger.info({ eventType: (event as any).e }, "BinanceMetricsEngine: unknown event type");
         break;
     }
   }

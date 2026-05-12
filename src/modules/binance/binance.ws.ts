@@ -151,7 +151,10 @@ export class BinanceWebSocketClient {
     const combined = parsed as BinanceCombinedMessage;
     if (combined.stream && combined.data) {
       const event = combined.data;
-      logger.debug({ stream: combined.stream, event: event.e }, "BinanceWebSocketClient: event");
+      logger.info(
+        { stream: combined.stream, eventType: event.e },
+        "BinanceWebSocketClient: event",
+      );
       this.dispatchEvent(event);
       return;
     }
@@ -159,7 +162,7 @@ export class BinanceWebSocketClient {
     // Fallback: handle raw event (for raw stream endpoint compatibility)
     const event = parsed as BinanceStreamEvent;
     if (event.e) {
-      logger.debug({ event: event.e }, "BinanceWebSocketClient: raw event");
+      logger.info({ eventType: event.e }, "BinanceWebSocketClient: raw event");
       this.dispatchEvent(event);
     }
   }
