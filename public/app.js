@@ -1,14 +1,8 @@
-// Polymarket Smart Money — dashboard. Plain ES2020, no build step.
+// Polymarket BTC Intelligence — dashboard. Plain ES2020, no build step.
 
-const REFRESH_MS = 15_000;
-const CATEGORY_STORAGE_KEY = "psm.dashboard.category";
+const REFRESH_MS = 8_000;
 
 const $ = (id) => document.getElementById(id);
-
-function getSelectedCategory() {
-  const sel = $("category-filter");
-  return sel ? sel.value : "";
-}
 
 function shortAddress(addr) {
   if (!addr) return "–";
@@ -31,6 +25,11 @@ function fmtMoney(n) {
 function fmtScore(n) {
   if (!Number.isFinite(n)) return "–";
   return n.toFixed(1);
+}
+
+function fmtPct(n, digits = 2) {
+  if (!Number.isFinite(n)) return "–";
+  return `${(n * 100).toFixed(digits)}%`;
 }
 
 function fmtRelative(timestamp) {
@@ -88,16 +87,21 @@ function renderHealth(health) {
     : `degraded · db ${checks.database} · redis ${checks.redis}`;
 }
 
-function renderStats(stats) {
+function renderStats(stats, btcMetrics) {
   if (!stats) return;
-  const { counts = {}, threshold, lastPipelineRun, pipelineScheduler } = stats;
+  const { counts = {}, lastPipelineRun, pipelineScheduler } = stats;
   $("stat-markets").textContent = fmtNumber(counts.activeMarkets);
   $("stat-markets-sub").textContent = `${fmtNumber(counts.totalMarkets)} total`;
-  $("stat-wallets").textContent = fmtNumber(counts.wallets);
-  $("stat-smart").textContent = fmtNumber(counts.smartWallets);
-  $("stat-smart-sub").textContent = `≥ ${fmtScore(threshold)}`;
-  $("stat-trades").textContent = fmtNumber(counts.trades);
   $("stat-alerts").textContent = fmtNumber(counts.alerts);
+
+  if (btcMetrics) {
+    $("stat-signal").textContent = fmtScore(btcMetrics.signalScore);
+    $("stat-signal-sub").textContent =
+      btcMetrics.signalScore >= 60 ? "elevated" : "neutral";
+    $("stat-prob").textContent = fmtPct(btcMetrics.modelProbability);
+    $("stat-price").textContent = fmtNumber(btcMetrics.metrics?.lastPrice, { maximumFractionDigits: 2 });
+    $("stat-price-sub").textContent = `mark ${fmtNumber(btcMetrics.metrics?.markPrice, { maximumFractionDigits: 2 })}`;
+  }
 
   if (pipelineScheduler) {
     $("scheduler-info").textContent = pipelineScheduler.enabled
@@ -127,21 +131,44 @@ function renderStats(stats) {
   pre.textContent = lines.join("\n");
 }
 
-function renderWallets(payload, threshold) {
-  const body = $("wallets-body");
-  const wallets = payload?.wallets ?? [];
-  if (wallets.length === 0) {
-    body.innerHTML = `<tr><td colspan="4" class="muted">No wallets yet — wait for the first pipeline run.</td></tr>`;
+function renderBtcMetrics(btcMetrics) {
+  if (!btcMetrics || !btcMetrics.metrics) {
+    $("metrics-age").textContent = "not ready";
     return;
   }
-  body.innerHTML = wallets
-    .map((w) => {
-      const hot = w.smartScore >= (threshold ?? 75);
+  const m = btcMetrics.metrics;
+  $("metrics-age").textContent = fmtRelative(m.timestamp);
+  $("m-price").textContent = fmtNumber(m.lastPrice, { maximumFractionDigits: 2 });
+  $("m-mark").textContent = fmtNumber(m.markPrice, { maximumFractionDigits: 2 });
+  $("m-v5").textContent = fmtPct(m.priceVelocity5s);
+  $("m-v15").textContent = fmtPct(m.priceVelocity15s);
+  $("m-v60").textContent = fmtPct(m.priceVelocity60s);
+  $("m-vol").textContent = fmtPct(m.volatilityExpansion, 4);
+  $("m-of").textContent = m.orderflowImbalance.toFixed(3);
+  $("m-spread").textContent = fmtPct(m.bidAskSpread);
+  $("m-liq").textContent = m.liquidationPressure.toFixed(3);
+}
+
+function renderSignals(payload) {
+  const body = $("signals-body");
+  const signals = payload?.signals ?? [];
+  if (signals.length === 0) {
+    body.innerHTML = `<tr><td colspan="5" class="muted">No signals yet — waiting for Binance + Polymarket data.</td></tr>`;
+    return;
+  }
+  body.innerHTML = signals
+    .map((s) => {
+      const q = s.market?.question ?? "(unknown)";
+      const edge = s.edge;
+      const edgeStr = `${edge > 0 ? "+" : ""}${fmtPct(edge)}`;
+      const confClass =
+        s.confidence === "HIGH" ? "hot" : s.confidence === "MEDIUM" ? "warm" : "";
       return `<tr>
-        <td><span class="mono">${shortAddress(w.address)}</span></td>
-        <td class="num"><span class="score-pill ${hot ? "hot" : ""}">${fmtScore(w.smartScore)}</span></td>
-        <td class="num">${fmtMoney(w.totalVolume)}</td>
-        <td>${fmtRelative(w.lastSeenAt)}</td>
+        <td>${fmtRelative(s.timestamp)}</td>
+        <td>${q}</td>
+        <td class="num">${s.side}</td>
+        <td class="num">${edgeStr}</td>
+        <td><span class="score-pill ${confClass}">${s.confidence}</span></td>
       </tr>`;
     })
     .join("");
@@ -151,50 +178,27 @@ function renderAlerts(payload) {
   const body = $("alerts-body");
   const alerts = payload?.alerts ?? [];
   if (alerts.length === 0) {
-    body.innerHTML = `<tr><td colspan="3" class="muted">No alerts yet.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="4" class="muted">No alerts yet.</td></tr>`;
     return;
   }
   body.innerHTML = alerts
     .map((a) => {
-      const q = a.market?.question ?? "(unknown market)";
-      const slug = a.market?.slug;
-      const marketCell = slug
-        ? `<a href="https://polymarket.com/market/${encodeURIComponent(slug)}" target="_blank">${q}</a>`
-        : q;
+      const q = a.market?.question ?? "(unknown)";
       return `<tr>
         <td>${fmtRelative(a.sentAt)}<div class="muted" style="font-size:11px">${fmtDate(a.sentAt)}</div></td>
-        <td><span class="mono">${shortAddress(a.walletAddress)}</span><div class="muted" style="font-size:11px">score ${fmtScore(a.wallet?.smartScore)}</div></td>
-        <td>${marketCell}</td>
+        <td>${q}</td>
+        <td class="num">${a.side ?? "–"}</td>
+        <td class="num">${a.message?.includes("Edge:") ? a.message.split("Edge:")[1]?.split("\n")[0]?.trim() : "–"}</td>
       </tr>`;
     })
     .join("");
-}
-
-function renderCategories(payload) {
-  const sel = $("category-filter");
-  if (!sel) return;
-  const current = sel.value;
-  const categories = payload?.categories ?? [];
-  // Keep the "All" option, then add each category.
-  sel.innerHTML =
-    `<option value="">All categories</option>` +
-    categories
-      .map(
-        (c) =>
-          `<option value="${c.category.replace(/"/g, "&quot;")}">${c.category} (${c.count})</option>`,
-      )
-      .join("");
-  // Restore selection if it still exists.
-  if (current && Array.from(sel.options).some((o) => o.value === current)) {
-    sel.value = current;
-  }
 }
 
 function renderMarkets(payload) {
   const body = $("markets-body");
   const markets = payload?.markets ?? [];
   if (markets.length === 0) {
-    body.innerHTML = `<tr><td colspan="4" class="muted">No markets synced yet.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="muted">No BTC markets synced yet.</td></tr>`;
     return;
   }
   body.innerHTML = markets
@@ -205,7 +209,6 @@ function renderMarkets(payload) {
         : m.question;
       return `<tr>
         <td>${slug}</td>
-        <td class="muted">${m.category ?? "–"}</td>
         <td class="num">${fmtMoney(m.volume)}</td>
         <td>${m.endDate ? fmtDate(m.endDate) : "–"}</td>
       </tr>`;
@@ -217,29 +220,25 @@ function renderMarkets(payload) {
 
 async function refresh() {
   $("last-refresh").textContent = "refreshing…";
-  const category = getSelectedCategory();
-  const marketsUrl = category
-    ? `/markets/active?limit=15&category=${encodeURIComponent(category)}`
-    : "/markets/active?limit=15";
 
   const results = await Promise.allSettled([
     getJSON("/health"),
     getJSON("/stats"),
-    getJSON("/wallets/top?limit=20"),
-    getJSON(marketsUrl),
+    getJSON("/btc/metrics"),
+    getJSON("/btc/signals/latest"),
+    getJSON("/btc/markets"),
     getJSON("/alerts/recent?limit=20"),
-    getJSON("/markets/categories"),
   ]);
 
-  const [health, stats, wallets, markets, alerts, categories] = results.map(
+  const [health, stats, btcMetrics, signals, markets, alerts] = results.map(
     (r) => (r.status === "fulfilled" ? r.value : null),
   );
 
   renderHealth(health);
-  renderStats(stats);
-  renderWallets(wallets, stats?.threshold);
+  renderStats(stats, btcMetrics);
+  renderBtcMetrics(btcMetrics);
+  renderSignals(signals);
   renderAlerts(alerts);
-  renderCategories(categories);
   renderMarkets(markets);
 
   $("last-refresh").textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
@@ -270,25 +269,6 @@ async function runPipeline() {
 document.addEventListener("DOMContentLoaded", () => {
   $("refresh-btn").addEventListener("click", refresh);
   $("run-pipeline-btn").addEventListener("click", runPipeline);
-
-  // Restore last selected category from localStorage, persist on change.
-  const sel = $("category-filter");
-  if (sel) {
-    const saved = localStorage.getItem(CATEGORY_STORAGE_KEY);
-    if (saved) {
-      // Will only stick once renderCategories populates options; we set
-      // value here as a hint and re-restore after first render too.
-      const opt = document.createElement("option");
-      opt.value = saved;
-      opt.textContent = saved;
-      sel.appendChild(opt);
-      sel.value = saved;
-    }
-    sel.addEventListener("change", () => {
-      localStorage.setItem(CATEGORY_STORAGE_KEY, sel.value);
-      refresh();
-    });
-  }
 
   refresh();
   setInterval(refresh, REFRESH_MS);

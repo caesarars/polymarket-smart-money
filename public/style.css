@@ -167,6 +167,10 @@ tbody tr:last-child td { border-bottom: 0; }
   background: rgba(61, 220, 151, 0.12);
   color: var(--ok);
 }
+.score-pill.warm {
+  background: rgba(240, 184, 110, 0.12);
+  color: var(--warn);
+}
 
 pre {
   background: #0b0d10;
@@ -205,3 +209,30 @@ footer {
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.error { border-color: var(--err); color: var(--err); }
 .toast.ok { border-color: var(--ok); color: var(--ok); }
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.metric {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.metric-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.metric-value {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}

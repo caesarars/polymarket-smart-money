@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Polymarket Smart Money</title>
+    <title>Polymarket BTC Intelligence</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <span class="logo">◇</span>
-        <h1>Polymarket Smart Money</h1>
+        <span class="logo">₿</span>
+        <h1>Polymarket BTC Intelligence</h1>
       </div>
       <div class="topbar-right">
         <span id="status-dot" class="status-dot status-unknown" title="health"></span>
@@ -22,26 +22,27 @@
     </header>
 
     <main>
+      <!-- Stats -->
       <section class="stats-grid">
         <div class="stat">
-          <div class="stat-label">Active markets</div>
+          <div class="stat-label">BTC Markets</div>
           <div class="stat-value" id="stat-markets">–</div>
           <div class="stat-sub muted" id="stat-markets-sub">&nbsp;</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Wallets seen</div>
-          <div class="stat-value" id="stat-wallets">–</div>
+          <div class="stat-label">Signal Score</div>
+          <div class="stat-value" id="stat-signal">–</div>
+          <div class="stat-sub muted" id="stat-signal-sub">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Model Prob</div>
+          <div class="stat-value" id="stat-prob">–</div>
           <div class="stat-sub muted">&nbsp;</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Smart wallets</div>
-          <div class="stat-value" id="stat-smart">–</div>
-          <div class="stat-sub muted" id="stat-smart-sub">&nbsp;</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Trades ingested</div>
-          <div class="stat-value" id="stat-trades">–</div>
-          <div class="stat-sub muted">&nbsp;</div>
+          <div class="stat-label">BTC Price</div>
+          <div class="stat-value" id="stat-price">–</div>
+          <div class="stat-sub muted" id="stat-price-sub">&nbsp;</div>
         </div>
         <div class="stat">
           <div class="stat-label">Alerts sent</div>
@@ -50,35 +51,76 @@
         </div>
       </section>
 
+      <!-- BTC Metrics -->
       <section class="panel">
         <div class="panel-head">
-          <h2>Last pipeline run</h2>
-          <span class="muted" id="scheduler-info">scheduler: –</span>
+          <h2>Binance BTC Metrics</h2>
+          <span class="muted" id="metrics-age">–</span>
         </div>
-        <pre id="last-run">No run recorded yet.</pre>
+        <div id="metrics-grid" class="metrics-grid">
+          <div class="metric">
+            <div class="metric-label">Last Price</div>
+            <div class="metric-value" id="m-price">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Mark Price</div>
+            <div class="metric-value" id="m-mark">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Velocity 5s</div>
+            <div class="metric-value" id="m-v5">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Velocity 15s</div>
+            <div class="metric-value" id="m-v15">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Velocity 60s</div>
+            <div class="metric-value" id="m-v60">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Volatility</div>
+            <div class="metric-value" id="m-vol">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Orderflow</div>
+            <div class="metric-value" id="m-of">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Spread</div>
+            <div class="metric-value" id="m-spread">–</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Liquidation</div>
+            <div class="metric-value" id="m-liq">–</div>
+          </div>
+        </div>
       </section>
 
       <section class="row">
+        <!-- BTC Signals -->
         <div class="panel">
           <div class="panel-head">
-            <h2>Top wallets</h2>
-            <span class="muted">by smartScore</span>
+            <h2>Latest BTC Signals</h2>
+            <span class="muted">edge ≥ 7%</span>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Address</th>
-                <th class="num">smartScore</th>
-                <th class="num">Volume</th>
-                <th>Last seen</th>
+                <th>Time</th>
+                <th>Market</th>
+                <th class="num">Side</th>
+                <th class="num">Edge</th>
+                <th>Conf</th>
               </tr>
             </thead>
-            <tbody id="wallets-body">
-              <tr><td colspan="4" class="muted">loading…</td></tr>
+            <tbody id="signals-body">
+              <tr><td colspan="5" class="muted">loading…</td></tr>
             </tbody>
           </table>
         </div>
 
+        <!-- Recent Alerts -->
         <div class="panel">
           <div class="panel-head">
             <h2>Recent alerts</h2>
@@ -88,40 +130,45 @@
             <thead>
               <tr>
                 <th>When</th>
-                <th>Wallet</th>
                 <th>Market</th>
+                <th class="num">Side</th>
+                <th class="num">Edge</th>
               </tr>
             </thead>
             <tbody id="alerts-body">
-              <tr><td colspan="3" class="muted">loading…</td></tr>
+              <tr><td colspan="4" class="muted">loading…</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
+      <!-- Active BTC Markets -->
       <section class="panel">
         <div class="panel-head">
-          <h2>Active markets</h2>
-          <div class="panel-head-controls">
-            <label class="muted" for="category-filter">Category:</label>
-            <select id="category-filter">
-              <option value="">All</option>
-            </select>
-          </div>
+          <h2>Active BTC Markets</h2>
+          <span class="muted">5m / 15m only</span>
         </div>
         <table>
           <thead>
             <tr>
               <th>Question</th>
-              <th>Category</th>
               <th class="num">Volume</th>
               <th>Ends</th>
             </tr>
           </thead>
           <tbody id="markets-body">
-            <tr><td colspan="4" class="muted">loading…</td></tr>
+            <tr><td colspan="3" class="muted">loading…</td></tr>
           </tbody>
         </table>
+      </section>
+
+      <!-- Pipeline Status -->
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Last pipeline run</h2>
+          <span class="muted" id="scheduler-info">scheduler: –</span>
+        </div>
+        <pre id="last-run">No run recorded yet.</pre>
       </section>
     </main>
 
@@ -130,7 +177,9 @@
       &nbsp;·&nbsp;
       <a href="/health" target="_blank">/health</a>
       &nbsp;·&nbsp;
-      <a href="/stats" target="_blank">/stats</a>
+      <a href="/btc/metrics" target="_blank">/btc/metrics</a>
+      &nbsp;·&nbsp;
+      <a href="/btc/signals/latest" target="_blank">/btc/signals</a>
       &nbsp;·&nbsp;
       <a href="/admin/queues" target="_blank">Queues</a>
     </footer>
