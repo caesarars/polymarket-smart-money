@@ -36,6 +36,7 @@ export async function ensurePipelineSchedule(): Promise<void> {
   const data: PipelineJob = {
     topMarkets: env.PIPELINE_TOP_MARKETS,
     tradesPerMarket: env.PIPELINE_TRADES_PER_MARKET,
+    ...(env.PIPELINE_CATEGORY ? { category: env.PIPELINE_CATEGORY } : {}),
   };
 
   await pipelineQueue.add(REPEAT_JOB_NAME, data, {

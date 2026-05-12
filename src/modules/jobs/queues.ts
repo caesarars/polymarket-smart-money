@@ -13,6 +13,7 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
 export interface SyncMarketsJob {
   limit?: number;
+  category?: string;
 }
 
 export interface ScoreWalletsJob {
@@ -32,6 +33,8 @@ export interface PipelineJob {
   holdersPerMarket?: number;
   activityPerWallet?: number;
   scoreThreshold?: number;
+  /** Optional category filter — e.g. "Crypto" — restricts sync + crawl. */
+  category?: string;
 }
 
 const connection = createRedisConnection();

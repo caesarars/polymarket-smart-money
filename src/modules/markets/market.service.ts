@@ -34,69 +34,126 @@ function parseEndDate(raw: GammaMarket["endDate"]): Date | null {
 
 export class MarketService {
   /**
-   * Sync the latest active markets from the Gamma API into Postgres.
+   * Sync active markets from the Gamma API into Postgres. Paginates so we
+   * actually cover the whole catalog (Polymarket has thousands of active
+   * markets), and orders by volume descending so the highest-traffic
+   * markets (incl. crypto BTC/ETH prediction markets) always make it in
+   * even if `maxMarkets` is small.
+   *
    * Idempotent: uses polymarketId as the upsert key.
    */
-  async syncActiveMarkets(limit = 200): Promise<{ synced: number }> {
-    const markets = await gammaClient.getMarkets({
-      active: true,
-      closed: false,
-      limit,
-    });
-    if (markets.length === 0) {
-      logger.warn("MarketService.syncActiveMarkets: no markets returned");
-      return { synced: 0 };
-    }
-
+  async syncActiveMarkets(
+    maxMarkets = 2000,
+    opts: { category?: string } = {},
+  ): Promise<{ synced: number; pages: number }> {
+    const pageSize = 100;
+    let offset = 0;
     let synced = 0;
-    for (const m of markets) {
-      const polymarketId = String(m.id ?? m.conditionId ?? "").trim();
-      if (!polymarketId) continue;
+    let pages = 0;
 
-      const tokenIds = parseTokenIds(m.clobTokenIds);
-      const [tokenYes, tokenNo] = [tokenIds[0] ?? null, tokenIds[1] ?? null];
+    while (offset < maxMarkets) {
+      const limit = Math.min(pageSize, maxMarkets - offset);
+      const markets = await gammaClient.getMarkets({
+        active: true,
+        closed: false,
+        limit,
+        offset,
+        // TODO: Gamma's exact sort param varies. `volume` works against
+        // the field we already store. If the API ignores it, we just get
+        // default order — still better than no order at all.
+        order: "volume",
+        ascending: false,
+        ...(opts.category ? { category: opts.category } : {}),
+      });
 
-      try {
-        await prisma.market.upsert({
-          where: { polymarketId },
-          create: {
-            polymarketId,
-            question: m.question ?? "(unknown)",
-            slug: m.slug ?? null,
-            category: m.category ?? null,
-            endDate: parseEndDate(m.endDate),
-            volume: toNumber(m.volume),
-            tokenYes,
-            tokenNo,
-            isActive: m.active !== false && m.closed !== true,
-          },
-          update: {
-            question: m.question ?? "(unknown)",
-            slug: m.slug ?? null,
-            category: m.category ?? null,
-            endDate: parseEndDate(m.endDate),
-            volume: toNumber(m.volume),
-            tokenYes,
-            tokenNo,
-            isActive: m.active !== false && m.closed !== true,
-          },
-        });
-        synced += 1;
-      } catch (err) {
-        logger.error({ err, polymarketId }, "MarketService: upsert failed");
+      if (markets.length === 0) break;
+      pages += 1;
+
+      for (const m of markets) {
+        const polymarketId = String(m.id ?? m.conditionId ?? "").trim();
+        if (!polymarketId) continue;
+
+        const tokenIds = parseTokenIds(m.clobTokenIds);
+        const [tokenYes, tokenNo] = [tokenIds[0] ?? null, tokenIds[1] ?? null];
+
+        try {
+          await prisma.market.upsert({
+            where: { polymarketId },
+            create: {
+              polymarketId,
+              question: m.question ?? "(unknown)",
+              slug: m.slug ?? null,
+              category: m.category ?? null,
+              endDate: parseEndDate(m.endDate),
+              volume: toNumber(m.volume),
+              tokenYes,
+              tokenNo,
+              isActive: m.active !== false && m.closed !== true,
+            },
+            update: {
+              question: m.question ?? "(unknown)",
+              slug: m.slug ?? null,
+              category: m.category ?? null,
+              endDate: parseEndDate(m.endDate),
+              volume: toNumber(m.volume),
+              tokenYes,
+              tokenNo,
+              isActive: m.active !== false && m.closed !== true,
+            },
+          });
+          synced += 1;
+        } catch (err) {
+          logger.error({ err, polymarketId }, "MarketService: upsert failed");
+        }
       }
+
+      // Page wasn't full → no more results from Gamma.
+      if (markets.length < limit) break;
+      offset += limit;
     }
 
-    logger.info({ synced, total: markets.length }, "MarketService: sync complete");
-    return { synced };
+    if (synced === 0) {
+      logger.warn(
+        { opts },
+        "MarketService.syncActiveMarkets: no markets returned",
+      );
+    } else {
+      logger.info(
+        { synced, pages, opts },
+        "MarketService: sync complete",
+      );
+    }
+    return { synced, pages };
   }
 
-  async getActiveMarkets(limit = 100): Promise<Market[]> {
+  async getActiveMarkets(
+    limit = 100,
+    opts: { category?: string } = {},
+  ): Promise<Market[]> {
     return prisma.market.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(opts.category ? { category: opts.category } : {}),
+      },
       orderBy: [{ volume: "desc" }, { endDate: "asc" }],
       take: limit,
     });
+  }
+
+  /**
+   * Distinct categories present in the DB, with counts. Used by the dashboard
+   * to populate a category filter dropdown.
+   */
+  async getCategories(): Promise<Array<{ category: string; count: number }>> {
+    const rows = await prisma.market.groupBy({
+      by: ["category"],
+      where: { isActive: true, NOT: { category: null } },
+      _count: { _all: true },
+      orderBy: { _count: { category: "desc" } },
+    });
+    return rows
+      .filter((r): r is typeof r & { category: string } => r.category !== null)
+      .map((r) => ({ category: r.category, count: r._count._all }));
   }
 
   async getByPolymarketId(polymarketId: string): Promise<Market | null> {

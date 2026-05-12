@@ -113,7 +113,22 @@ main { padding: 20px 24px; max-width: 1320px; margin: 0 auto; }
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
+.panel-head-controls { display: flex; align-items: center; gap: 8px; }
+
+select {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+select:hover { border-color: #2f3a4d; }
+select:focus { outline: none; border-color: var(--accent); }
 .panel h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.2px; }
 
 table {

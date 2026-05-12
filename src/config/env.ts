@@ -37,6 +37,11 @@ const envSchema = z.object({
   /** Knobs for the scheduled pipeline run (only used when scheduler is enabled). */
   PIPELINE_TOP_MARKETS: z.coerce.number().int().min(1).max(500).default(20),
   PIPELINE_TRADES_PER_MARKET: z.coerce.number().int().min(1).max(1000).default(100),
+  /**
+   * Optional category to lock the pipeline to (e.g. "Crypto"). Leave empty to
+   * crawl the top markets across all categories.
+   */
+  PIPELINE_CATEGORY: z.string().min(1).max(64).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

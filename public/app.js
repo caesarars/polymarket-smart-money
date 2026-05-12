@@ -1,8 +1,14 @@
 // Polymarket Smart Money — dashboard. Plain ES2020, no build step.
 
 const REFRESH_MS = 15_000;
+const CATEGORY_STORAGE_KEY = "psm.dashboard.category";
 
 const $ = (id) => document.getElementById(id);
+
+function getSelectedCategory() {
+  const sel = $("category-filter");
+  return sel ? sel.value : "";
+}
 
 function shortAddress(addr) {
   if (!addr) return "–";
@@ -164,6 +170,26 @@ function renderAlerts(payload) {
     .join("");
 }
 
+function renderCategories(payload) {
+  const sel = $("category-filter");
+  if (!sel) return;
+  const current = sel.value;
+  const categories = payload?.categories ?? [];
+  // Keep the "All" option, then add each category.
+  sel.innerHTML =
+    `<option value="">All categories</option>` +
+    categories
+      .map(
+        (c) =>
+          `<option value="${c.category.replace(/"/g, "&quot;")}">${c.category} (${c.count})</option>`,
+      )
+      .join("");
+  // Restore selection if it still exists.
+  if (current && Array.from(sel.options).some((o) => o.value === current)) {
+    sel.value = current;
+  }
+}
+
 function renderMarkets(payload) {
   const body = $("markets-body");
   const markets = payload?.markets ?? [];
@@ -191,22 +217,29 @@ function renderMarkets(payload) {
 
 async function refresh() {
   $("last-refresh").textContent = "refreshing…";
+  const category = getSelectedCategory();
+  const marketsUrl = category
+    ? `/markets/active?limit=15&category=${encodeURIComponent(category)}`
+    : "/markets/active?limit=15";
+
   const results = await Promise.allSettled([
     getJSON("/health"),
     getJSON("/stats"),
     getJSON("/wallets/top?limit=20"),
-    getJSON("/markets/active?limit=15"),
+    getJSON(marketsUrl),
     getJSON("/alerts/recent?limit=20"),
+    getJSON("/markets/categories"),
   ]);
 
-  const [health, stats, wallets, markets, alerts] = results.map((r) =>
-    r.status === "fulfilled" ? r.value : null,
+  const [health, stats, wallets, markets, alerts, categories] = results.map(
+    (r) => (r.status === "fulfilled" ? r.value : null),
   );
 
   renderHealth(health);
   renderStats(stats);
   renderWallets(wallets, stats?.threshold);
   renderAlerts(alerts);
+  renderCategories(categories);
   renderMarkets(markets);
 
   $("last-refresh").textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
@@ -237,6 +270,26 @@ async function runPipeline() {
 document.addEventListener("DOMContentLoaded", () => {
   $("refresh-btn").addEventListener("click", refresh);
   $("run-pipeline-btn").addEventListener("click", runPipeline);
+
+  // Restore last selected category from localStorage, persist on change.
+  const sel = $("category-filter");
+  if (sel) {
+    const saved = localStorage.getItem(CATEGORY_STORAGE_KEY);
+    if (saved) {
+      // Will only stick once renderCategories populates options; we set
+      // value here as a hint and re-restore after first render too.
+      const opt = document.createElement("option");
+      opt.value = saved;
+      opt.textContent = saved;
+      sel.appendChild(opt);
+      sel.value = saved;
+    }
+    sel.addEventListener("change", () => {
+      localStorage.setItem(CATEGORY_STORAGE_KEY, sel.value);
+      refresh();
+    });
+  }
+
   refresh();
   setInterval(refresh, REFRESH_MS);
 });

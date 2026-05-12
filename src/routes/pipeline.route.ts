@@ -6,12 +6,13 @@ import { pipelineQueue } from "../modules/jobs/queues";
 export const pipelineRouter = Router();
 
 const bodySchema = z.object({
-  marketLimit: z.coerce.number().int().min(1).max(1000).optional(),
+  marketLimit: z.coerce.number().int().min(1).max(5000).optional(),
   topMarkets: z.coerce.number().int().min(1).max(500).optional(),
   tradesPerMarket: z.coerce.number().int().min(1).max(1000).optional(),
   holdersPerMarket: z.coerce.number().int().min(0).max(500).optional(),
   activityPerWallet: z.coerce.number().int().min(0).max(500).optional(),
   scoreThreshold: z.coerce.number().min(0).max(100).optional(),
+  category: z.string().min(1).max(64).optional(),
 });
 
 pipelineRouter.post("/jobs/run-pipeline", async (req, res) => {

@@ -8,9 +8,10 @@ export function startSyncMarketsWorker(): Worker<SyncMarketsJob> {
   const worker = new Worker<SyncMarketsJob>(
     QUEUE_NAMES.syncMarkets,
     async (job) => {
-      const limit = job.data.limit ?? 200;
-      logger.info({ jobId: job.id, limit }, "syncMarkets: started");
-      const result = await marketService.syncActiveMarkets(limit);
+      const limit = job.data.limit ?? 2000;
+      const category = job.data.category;
+      logger.info({ jobId: job.id, limit, category }, "syncMarkets: started");
+      const result = await marketService.syncActiveMarkets(limit, { category });
       logger.info({ jobId: job.id, ...result }, "syncMarkets: finished");
       return result;
     },

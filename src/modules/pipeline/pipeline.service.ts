@@ -22,6 +22,8 @@ export interface PipelineOptions {
   activityPerWallet?: number;
   /** Override SMART_WALLET_SCORE_THRESHOLD for this run. */
   scoreThreshold?: number;
+  /** Restrict sync + crawl to a single category (e.g. "Crypto"). */
+  category?: string;
 }
 
 export interface PipelineSummary {
@@ -47,12 +49,13 @@ export class PipelineService {
    */
   async runOnce(opts: PipelineOptions = {}): Promise<PipelineSummary> {
     const cfg = {
-      marketLimit: opts.marketLimit ?? 200,
+      marketLimit: opts.marketLimit ?? 2000,
       topMarkets: opts.topMarkets ?? 20,
       tradesPerMarket: opts.tradesPerMarket ?? 100,
       holdersPerMarket: opts.holdersPerMarket ?? 25,
       activityPerWallet: opts.activityPerWallet ?? 25,
       scoreThreshold: opts.scoreThreshold ?? env.SMART_WALLET_SCORE_THRESHOLD,
+      category: opts.category ?? env.PIPELINE_CATEGORY,
     };
 
     logger.info({ cfg }, "Pipeline.runOnce: starting");
@@ -60,9 +63,12 @@ export class PipelineService {
     // --- 1. Sync markets ---
     const { synced: marketsSynced } = await marketService.syncActiveMarkets(
       cfg.marketLimit,
+      { category: cfg.category },
     );
 
-    const topMarkets = await marketService.getActiveMarkets(cfg.topMarkets);
+    const topMarkets = await marketService.getActiveMarkets(cfg.topMarkets, {
+      category: cfg.category,
+    });
     logger.info(
       { count: topMarkets.length },
       "Pipeline: top active markets selected",
